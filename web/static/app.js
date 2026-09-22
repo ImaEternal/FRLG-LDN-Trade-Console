@@ -374,9 +374,11 @@ function prepStepsUI(done) {
   $("#prepSteps").innerHTML = PREP_STEPS.map((t,i)=>
     `<div class="prepStep${i<done?" on":""}"><span class="tick"></span>${t}</div>`).join("");
 }
-// A trade has two sides. PARTY1 is what the simulated trainer offers up;
-// PARTY2 is the one that ends up in your game. Showing only one of them left
-// the most important half — what you actually receive — off the screen.
+// How the trade really works: the .pk3 files are the EMULATOR's party (up to
+// six, so the fake trainer looks real). Upstream's --slot defaults to 1, so
+// PARTY2 is the one offered and the one that ends up in your game. What YOU
+// give up is chosen on the console, in-game, from your own party — this side
+// has no say in it. Labelling PARTY1 "you send" was simply wrong.
 async function tradeCard(p, role, label) {
   if (!p) return `<div class="tcard" data-role="${label}"><div class="hd">
       <div class="art"></div><div><h4>—</h4>
@@ -418,12 +420,20 @@ $("#sendBtn").addEventListener("click", async () => {
   $("#prepLog").textContent = "";
   $("#prepPair").innerHTML = `<div class="tcard" data-role="loading"></div>`;
   prepStepsUI(0);
-  $("#prepHint").textContent = "Building both sides of the trade…";
+  $("#prepHint").textContent =
+    `Preparing a party of ${party.length} for the simulated trainer…`;
   openModal("mPrep");
   $("#prepPair").innerHTML =
-      (await tradeCard(out, "out", "you send"))
+      (await tradeCard(inc, "in", "you receive this"))
     + `<div class="swap">⇄</div>`
-    + (await tradeCard(inc, "in", "you receive"));
+    + `<div class="tcard out" data-role="you give one of yours">
+         <div class="youPick">
+           <div class="qmark">?</div>
+           <h4>You choose in-game</h4>
+           <p>Pick any Pokémon from your own party at the trade screen on your
+              Switch. Whatever you pick is saved to <code>out/</code>.</p>
+         </div>
+       </div>`;
 
   // write the .pk3 files while the reveal animates
   const tick = (n) => new Promise(r => setTimeout(() => { prepStepsUI(n); r(); }, 420));
@@ -438,7 +448,8 @@ $("#sendBtn").addEventListener("click", async () => {
     `built ${m.file}: ${m.name} Lv${m.level}${m.shiny?" shiny":""}`, "ok"));
   await tick(3);
   $("#prepHint").textContent =
-    "Ready. Get your console to the Direct Corner trade screen, then press Continue.";
+    `Ready — ${party.length} Pokémon in the simulated party. Get your console to the `
+    + `Direct Corner trade screen, then press Continue.`;
   $("#prepContinue").disabled = false;
   poll();
 });
@@ -450,12 +461,12 @@ function prepLog(line, kind="l") {
 // --- step 2: send -----------------------------------------------------------
 $("#prepContinue").addEventListener("click", async () => {
   closeModal("mPrep");
-  const out = party[0], inc = party[1];
-  const mini = (p, cap) => `<div class="mini"><img src="${sprite(p.natdex,p.shiny)}" alt="">
-      <div style="min-width:0"><div class="nm">${p.nickname||p.name}</div>
-      <div class="sb">${cap} · Lv ${p.level}</div></div></div>`;
+  const inc = party[1];
   $("#sendHead").innerHTML =
-    mini(out, "you send") + `<span class="arrow">⇄</span>` + mini(inc, "you receive");
+    `<div class="mini"><img src="${sprite(inc.natdex,inc.shiny)}" alt="">
+       <div style="min-width:0"><div class="nm">Sending ${inc.nickname||inc.name}</div>
+       <div class="sb">Lv ${inc.level} · you choose what to give on the console</div></div>
+     </div>`;
   $("#sendOt").textContent = $("#ot").value || "EMU";
   $("#sendLog").textContent = "";
   statusUI("radio");

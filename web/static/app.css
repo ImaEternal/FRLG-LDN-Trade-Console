@@ -415,3 +415,14 @@ input[type=range]{width:100%;accent-color:var(--red);height:20px}
 
 @media(max-width:860px){ .tradePair{grid-template-columns:1fr;gap:12px}
   .swap{transform:rotate(90deg);padding:2px 0} }
+
+
+/* the side we do NOT control: the player picks in-game */
+.youPick{margin-top:26px;display:grid;gap:9px;justify-items:center;text-align:center;
+  padding:8px 4px 4px}
+.youPick .qmark{width:76px;height:76px;border-radius:14px;display:grid;place-items:center;
+  background:var(--sunk);border:2px dashed var(--line-2);color:var(--ink-3);
+  font-size:32px;font-weight:800}
+.youPick h4{margin:0;font-size:15px;font-weight:700}
+.youPick p{margin:0;font-size:11.5px;color:var(--ink-3);line-height:1.55}
+.youPick code{background:var(--sunk);padding:1px 5px;border-radius:4px;font-size:10.5px}
