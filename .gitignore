@@ -5,6 +5,10 @@ keys/*
 *.keys
 !.env.example
 
+# --- never publish: local AI-assistant notes ---
+CLAUDE.md
+.claude/
+
 # --- machine-specific config ---
 .env
 
