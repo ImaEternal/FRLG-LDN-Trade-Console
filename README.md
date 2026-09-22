@@ -2,7 +2,7 @@
 
 <img src="docs/pokeball.svg" width="110" alt="">
 
-# FRLG Trade Console
+# FRLG LDN Trade Console
 
 **Build any Gen III Pokémon in a browser and trade it to a real Nintendo Switch
 over local wireless.**
@@ -115,8 +115,8 @@ session on a 5GHz channel, which this scans for.
 ## Install
 
 ```bash
-git clone https://github.com/ImaEternal/FRLG-Trade-Console
-cd FRLG-Trade-Console
+git clone https://github.com/ImaEternal/FRLG-LDN-Trade-Console
+cd FRLG-LDN-Trade-Console
 bash scripts/setup.sh          # fetches upstream, applies patches, gets sprites + data
 cp /path/to/prod.keys keys/    # from your own console
 docker compose up -d dashboard
