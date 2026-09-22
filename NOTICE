@@ -18,8 +18,3 @@ third parties:
 
   PokeAPI        — species, move and item datasets, and sprite mirror.
       https://github.com/PokeAPI/pokeapi
-
-The radio diagnostics in web/diag.py were informed by the approach in
-pokemon-ldn-trade by SantiagoPuertas (raw per-channel listening and real
-injection testing, rather than trusting what the driver declares):
-      https://github.com/SantiagoPuertas/pokemon-ldn-trade

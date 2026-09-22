@@ -1,12 +1,9 @@
 """Radio diagnostics: is the console emitting, and can this card do LDN?
 
-Ported in spirit from SantiagoPuertas/pokemon-ldn-trade's escuchar_ldn.sh and
-check_injection.sh (MIT-spirited community work on the same upstream). The
-idea there is the one we were missing all evening:
-
-  `saw 0` does not say whether the fault is the PC or the Switch.
-
-So these two tests deliberately avoid prod.keys, Pia and frlgsim entirely:
+`no joinable FRLG network (saw 0)` does not say whether the fault is the PC or
+the Switch, and that ambiguity is most of the difficulty in getting a trade to
+work. These two tests deliberately avoid prod.keys, Pia and frlgsim entirely so
+the answer is unambiguous:
 
   listen  raw 802.11 monitor capture per channel, counting management and
           action frames. Frames here => the radio receives fine and any
