@@ -22,7 +22,7 @@ interface around it.
 </div>
 
 <div align="center">
-<img src="docs/screenshots/dashboard.png" width="920" alt="The dashboard">
+<img src="docs/screenshots/dashboard.png" width="960" alt="The dashboard">
 </div>
 
 ---
@@ -45,19 +45,19 @@ work. This adds:
 
 ### Builder
 
-<img src="docs/screenshots/builder.png" width="900" alt="Builder">
+<img src="docs/screenshots/builder.png" width="960" alt="Builder">
 
 <sub>Level, nature, nickname, OT, held item, friendship and shininess — with legal level-up moves, IVs and EVs behind the two panels below</sub>
 
 ### Party and controls
 
-<img src="docs/screenshots/bay.png" width="900" alt="Healing bay">
+<img src="docs/screenshots/bay.png" width="960" alt="Healing bay">
 
 <sub>Six sockets with type-coloured rings · radio control and diagnostics · a live trade log</sub>
 
 ### Responsive
 
-<img src="docs/screenshots/mobile.png" width="900" alt="Mobile">
+<img src="docs/screenshots/mobile.png" width="960" alt="Mobile">
 
 <sub>Usable from a phone while you stand at the Switch</sub>
 
