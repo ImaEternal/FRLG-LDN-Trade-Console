@@ -1,0 +1,12 @@
+[Unit]
+Description=Apply an FRLG radio switch requested by the dashboard
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=@INSTALL_DIR@
+# Runs as root on the HOST: this is the privileged action the container is
+# deliberately not allowed to perform itself.
+ExecStart=@INSTALL_DIR@/scripts/radio-agent.sh
+TimeoutStartSec=120

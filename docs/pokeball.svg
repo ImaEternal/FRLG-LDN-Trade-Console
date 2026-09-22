@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <!-- Top half: lit from upper-left so the sphere reads as a sphere, not a disc. -->
+    <linearGradient id="red" x1="0.25" y1="0" x2="0.75" y2="1">
+      <stop offset="0"   stop-color="#ff6a4d"/>
+      <stop offset="0.45" stop-color="#ee3b1b"/>
+      <stop offset="1"   stop-color="#b81f08"/>
+    </linearGradient>
+    <linearGradient id="white" x1="0.25" y1="0" x2="0.75" y2="1">
+      <stop offset="0"   stop-color="#ffffff"/>
+      <stop offset="0.55" stop-color="#eef1f5"/>
+      <stop offset="1"   stop-color="#c3cbd6"/>
+    </linearGradient>
+    <!-- Specular highlight, kept soft and off-centre. -->
+    <radialGradient id="gloss" cx="0.34" cy="0.28" r="0.42">
+      <stop offset="0"   stop-color="#ffffff" stop-opacity="0.55"/>
+      <stop offset="0.6" stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="1"   stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="btn" cx="0.38" cy="0.32" r="0.75">
+      <stop offset="0"   stop-color="#ffffff"/>
+      <stop offset="0.7" stop-color="#e6ebf2"/>
+      <stop offset="1"   stop-color="#aab4c2"/>
+    </radialGradient>
+    <clipPath id="ball"><circle cx="128" cy="128" r="112"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#ball)">
+    <rect x="0" y="0"   width="256" height="128" fill="url(#red)"/>
+    <rect x="0" y="128" width="256" height="128" fill="url(#white)"/>
+    <!-- Equator band -->
+    <rect x="0" y="112" width="256" height="32" fill="#16181d"/>
+    <circle cx="128" cy="128" r="112" fill="url(#gloss)"/>
+  </g>
+
+  <!-- Outline last so it sits cleanly over the fills -->
+  <circle cx="128" cy="128" r="112" fill="none" stroke="#16181d" stroke-width="13"/>
+
+  <!-- Centre button -->
+  <circle cx="128" cy="128" r="42" fill="#16181d"/>
+  <circle cx="128" cy="128" r="31" fill="url(#btn)"/>
+  <circle cx="128" cy="128" r="16" fill="#f4f7fb" stroke="#9aa5b4" stroke-width="3"/>
+  <circle cx="121" cy="121" r="6" fill="#ffffff" opacity="0.9"/>
+</svg>

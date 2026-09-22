@@ -1,0 +1,42 @@
+# The container cannot be network-isolated: the ldn library drives the WiFi
+# card through nl80211 netlink, so it needs the host network namespace to see
+# the phy, and NET_ADMIN/NET_RAW to control it.
+#
+# It deliberately does NOT get host PID/namespace access. Freeing the radio
+# means changing host networking, and that is done by a systemd helper on the
+# host reading control/request -- not by the container reaching outside itself.
+services:
+  dashboard:
+    build: .
+    image: frlg-ldn-trade:latest
+    container_name: frlg-dashboard
+    restart: unless-stopped
+    network_mode: host
+    privileged: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    volumes:
+      - ./keys/prod.keys:/root/.switch/prod.keys:ro
+      - ./pk3:/app/pk3
+      - ./out:/app/out
+      - ./control:/app/control
+      # nmcli inside the container talks to the host's NetworkManager through
+      # this socket; without it nmcli is present but cannot do anything.
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+    working_dir: /app
+
+  # One-shot CLI for running a trade by hand:
+  #   docker compose run --rm frlg frlgtrade.py --live -o out/x.pk3 pk3/PARTY1.pk3 pk3/PARTY2.pk3
+  frlg:
+    build: .
+    image: frlg-ldn-trade:latest
+    network_mode: host
+    privileged: true
+    cap_add: [NET_ADMIN, NET_RAW]
+    volumes:
+      - ./keys/prod.keys:/root/.switch/prod.keys:ro
+      - ./pk3:/app/pk3
+      - ./out:/app/out
+      - ./control:/app/control
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+    working_dir: /app
+    profiles: [cli]

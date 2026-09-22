@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FRLG Trade Console</title>
+<link rel="icon" href="/static/pokeball.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="top">
+  <img class="ball" src="/static/pokeball.svg" alt="" width="30" height="30">
+  <div class="title">FRLG Trade Console<small>Local Wireless · Gen III</small></div>
+  <div class="sp"></div>
+  <div class="pill"><span class="dot" id="d-keys"></span><span id="t-keys">keys</span></div>
+  <div class="pill"><span class="dot" id="d-radio"></span><span id="t-radio">radio</span></div>
+  <div class="pill"><span class="dot" id="d-trade"></span><span id="t-trade">idle</span></div>
+</header>
+
+<main class="wrap">
+  <!-- ---------------- dex ---------------- -->
+  <section class="panel">
+    <h2>Pokédex <span class="n" id="dexcount"></span></h2>
+    <div class="pad" style="padding-bottom:8px">
+      <input class="search" id="q" placeholder="Search name or #number…" autocomplete="off">
+    </div>
+    <div class="dex" id="dex"></div>
+  </section>
+
+  <!-- ---------------- builder ---------------- -->
+  <section class="panel">
+    <div class="hero">
+      <div class="art"><img id="art" alt=""><span class="shiny-badge" id="shinyBadge" hidden>SHINY</span></div>
+      <div>
+        <h1 id="pname">—</h1>
+        <div class="sub" id="pmeta">pick a Pokémon from the dex</div>
+        <div class="types" id="ptypes" style="margin-top:9px"></div>
+        <div class="moves" id="pmoves"></div>
+      </div>
+    </div>
+
+    <div class="pad">
+      <div class="grid">
+        <div>
+          <label for="lv">Level</label>
+          <div class="lvrow">
+            <input type="range" id="lv" min="1" max="100" value="50">
+            <div class="lvbox" id="lvv">50</div>
+          </div>
+        </div>
+        <div>
+          <label for="nature">Nature</label>
+          <select id="nature"><option value="">Random</option></select>
+        </div>
+        <div>
+          <label for="nick">Nickname <span style="text-transform:none;letter-spacing:0">(optional)</span></label>
+          <input type="text" id="nick" maxlength="10" placeholder="species name">
+        </div>
+        <div>
+          <label for="ot">OT name</label>
+          <input type="text" id="ot" maxlength="7" value="EMU">
+        </div>
+        <div>
+          <label for="item">Held item</label>
+          <select id="item"><option value="0">None</option></select>
+        </div>
+        <div>
+          <label for="friend">Friendship</label>
+          <input type="number" id="friend" min="0" max="255" value="70">
+        </div>
+        <div style="grid-column:1/-1">
+          <div class="tog" id="shinyTog"><div class="sw"></div>
+            <div><b>Shiny</b><div style="font-size:11px;color:var(--ink-faint)">solves a PID that satisfies the shiny check against your trainer ID</div></div>
+          </div>
+        </div>
+      </div>
+
+      <details class="adv" id="advMoves">
+        <summary>Moves <span class="hint">legal level-up moves for this species</span></summary>
+        <div class="mvgrid" id="moveSel"></div>
+      </details>
+
+      <details class="adv" id="advIV">
+        <summary>IVs &amp; EVs <span class="hint" id="evTotal"></span></summary>
+        <div class="ivgrid" id="ivEv"></div>
+        <div class="btnrow" style="margin-top:10px">
+          <button class="btn" id="ivMaxBtn" type="button">Max IVs</button>
+          <button class="btn" id="ivRandBtn" type="button">Random IVs</button>
+          <button class="btn" id="evClearBtn" type="button">Clear EVs</button>
+        </div>
+      </details>
+
+      <div class="stats" id="stats" style="margin-top:16px"></div>
+
+      <div class="btnrow" style="margin-top:16px">
+        <button class="btn pri" id="addBtn" disabled>Add to party</button>
+        <button class="btn" id="rerollBtn" disabled>Reroll PID</button>
+        <button class="btn" id="boxBtn" disabled>Save to box</button>
+      </div>
+      <div id="buildErr"></div>
+    </div>
+  </section>
+
+  <!-- ---------------- run ---------------- -->
+  <section class="panel col3">
+    <h2>Box <span class="n" id="boxn">0</span></h2>
+    <div class="boxlist" id="boxList"></div>
+
+    <h2 style="border-top:1px solid var(--line)">Healing bay <span class="n" id="partyn">0 / 6</span></h2>
+    <div class="bay">
+      <div class="sockets" id="party"></div>
+      <div class="bay-rail"></div>
+    </div>
+    <div class="pad" style="border-top:1px solid var(--line)">
+      <div class="btnrow">
+        <button class="btn" id="writeBtn" disabled>Write .pk3 files</button>
+        <button class="btn" id="radioBtn">Free the radio</button>
+        <button class="btn" id="scanBtn">Scan for console</button>
+        <button class="btn" id="listenBtn">Listen (raw)</button>
+        <button class="btn" id="injectBtn">Test card</button>
+        <button class="btn go" id="startBtn" disabled>Start trade</button>
+        <button class="btn" id="stopBtn" disabled>Stop</button>
+      </div>
+      <div class="why" id="startWhy"></div>
+      <div class="note" style="padding:11px 0 0">
+        You receive <b>slot 2</b>; whatever you trade away is saved to <code>out/</code>.
+      </div>
+    </div>
+    <h2 style="border-top:1px solid var(--line)">Console</h2>
+    <div class="console" id="console"><span class="l">waiting…</span></div>
+    <h2 style="border-top:1px solid var(--line)">On the Switch</h2>
+    <ol class="steps">
+      <li>Direct Corner → trade → be <b>Leader</b></li>
+      <li>Approve the join request from <b id="otEcho">EMU</b></li>
+      <li>Walk to the <b>left chair</b> (movement may be laggy)</li>
+      <li>Pick the Pokémon you want to send away, accept</li>
+      <li>Back at the trade menu, <b>cancel</b>, then walk out</li>
+    </ol>
+    <div class="note" id="received"></div>
+  </section>
+</main>
+<script src="/static/app.js"></script>
+</body>
+</html>

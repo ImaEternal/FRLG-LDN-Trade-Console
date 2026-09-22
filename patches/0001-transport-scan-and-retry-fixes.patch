@@ -1,0 +1,102 @@
+--- frlgsim/transport.py	2026-09-22 01:19:56.091988067 -0400
++++ frlgsim/transport.py	2026-09-21 22:14:31.385698331 -0400
+@@ -15,6 +15,7 @@
+ import json
+ import socket
+ import struct
++import os
+ import subprocess
+ import threading
+ import time
+@@ -321,13 +322,27 @@
+         self._err = None
+ 
+     # -- LDN join runs in a trio thread that keeps the connection alive -------
+-    def start(self, timeout=30, attempts=3, settle=1.5):
++    def start(self, timeout=30, attempts=None, settle=None):
+         """Join the LDN network, retrying transient failures. The LDN/nl80211 layer flakes
+         intermittently (radio busy, association timeout, a stale vif racing the fresh join) - the
+         SAME failure the bridge hits as 'connection failed'. Rather than make the user re-run, we
+         free the radio and retry up to `attempts` times, logging each attempt's FULLY-UNWRAPPED
+         cause (see _format_join_error) so persistent problems are still diagnosable instead of
+         hidden behind trio's opaque ExceptionGroup."""
++        # A console only advertises while someone is stood at the waiting
++        # screen, so three tries over ~5s is a narrow window to hit. Tunable
++        # via FRLG_JOIN_ATTEMPTS without touching the call sites.
++        if attempts is None:
++            attempts = int(os.environ.get("FRLG_JOIN_ATTEMPTS", "3"))
++        # 1.5s is not enough for mt7925 to release between attempts. Observed
++        # on this card: attempt 3 onwards fails with
++        #   BlockingIOError [Errno 114]: Match already configured
++        # i.e. the previous attempt's nl80211 frame registrations are still
++        # live when the next one registers its own, and the runs degrade
++        # (saw 1 -> saw 0) as state piles up.
++        if settle is None:
++            settle = float(os.environ.get("FRLG_JOIN_SETTLE", "4.0"))
++        unwind = float(os.environ.get("FRLG_JOIN_UNWIND", "8.0"))
+         last_err = None
+         for attempt in range(1, attempts + 1):
+             free_radio({self.phyname}, self.log)        # clear the radio before each join attempt
+@@ -350,7 +365,17 @@
+                 return self
+             self._stop.set()
+             if self._thread is not None:
+-                self._thread.join(timeout=2)            # let an abandoned attempt unwind/disconnect
++                # Wait properly for the abandoned attempt to unwind. A 2s cap
++                # let a still-running attempt overlap the next one, which is
++                # what produced "Match already configured".
++                self._thread.join(timeout=unwind)
++                if self._thread.is_alive():
++                    self.log(f"[live] previous attempt did not unwind within {unwind}s; "
++                             f"the radio may still be held")
++            # Tear the radio right down between attempts, not just at the top
++            # of the next one: delete any leaked vif before we sleep so the
++            # driver has the settle window to actually release it.
++            light_cleanup(self.log)
+             if attempt < attempts:
+                 self.log(f"[live] retrying LDN join in {settle}s "
+                          f"(attempt {attempt + 1}/{attempts})...")
+@@ -370,7 +395,18 @@
+         async def main():
+             keys = ldn.load_keys(self.keys_path)
+             self.info("Scanning for the FRLG network...")
+-            networks = await ldn.scan(keys, phyname=self.phyname)
++            # ldn.scan defaults to dwell_time=0.11s over channels [1,6,11] --
++            # a 330ms listening window per attempt. A console advertising a
++            # trade is easy to miss in that blink, which shows up as the very
++            # unhelpful "no joinable FRLG network (saw 0)". Dwell longer;
++            # FRLG_SCAN_DWELL lets it be tuned without another rebuild.
++            dwell = float(os.environ.get("FRLG_SCAN_DWELL", "0.60"))
++            # Default is [1,6,11]; the library also supports 36/40/44/48 and a
++            # console on a 5GHz AP may host the session there.
++            chans = [int(c) for c in os.environ.get(
++                "FRLG_CHANNELS", "1,6,11,36,40,44,48").split(",") if c.strip()]
++            networks = await ldn.scan(keys, phyname=self.phyname, dwell_time=dwell,
++                                      channels=chans)
+             joinable = [n for n in networks
+                         if n.accept_policy != ldn.ACCEPT_NONE
+                         and n.num_participants < n.max_participants]
+@@ -384,10 +420,20 @@
+             # Prefer an exact FRLG comm-id match; else fall back to the only joinable network.
+             net = next((n for n in joinable
+                         if n.local_communication_id == self.LOCAL_COMMUNICATION_ID), None)
+-            if net is None and len(joinable) == 1:
++            # The upstream fallback grabs "the only joinable network" when no
++            # FRLG comm-id matches. With a neighbour's Switch in range that
++            # means repeatedly associating to someone else's game and being
++            # rejected with status code 1 -- eight confusing failures that look
++            # like our bug. Only take the fallback if explicitly asked for.
++            if net is None and len(joinable) == 1 and os.environ.get("FRLG_ANY_NETWORK") == "1":
+                 net = joinable[0]
+-                self.log(f"[live] no comm-id match; using the only joinable network "
+-                         f"(comm_id=0x{net.local_communication_id:016x})")
++                self.log(f"[live] no comm-id match; FRLG_ANY_NETWORK=1 so using the only "
++                         f"joinable network (comm_id=0x{net.local_communication_id:016x})")
++            elif net is None and joinable:
++                seen_ids = ", ".join(f"0x{n.local_communication_id:016x}" for n in joinable)
++                self.log(f"[live] {len(joinable)} joinable network(s) in range ({seen_ids}) but "
++                         f"none are FRLG (0x{self.LOCAL_COMMUNICATION_ID:016x}). That is another "
++                         f"console nearby, not your trade -- not attempting to join it.")
+             if net is None:
+                 self._err = (f"no joinable FRLG network (saw {len(networks)}, "
+                              f"{len(joinable)} joinable) - set --comm-id from the list above")

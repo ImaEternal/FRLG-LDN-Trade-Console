@@ -1,0 +1,25 @@
+FRLG Trade Console
+Copyright (c) 2026 ImaEternal
+Licensed under the EUPL-1.2. See LICENSE and LICENSING.md.
+
+This product depends on, and includes patches against, software developed by
+third parties:
+
+  frlg-ldn-trade — Copyright (c) tornadus and contributors, AGPL-3.0
+      https://github.com/tornadus/frlg-ldn-trade
+      Cloned at setup into vendor/. Our modifications are in patches/ and
+      are likewise AGPL-3.0.
+
+  LDN            — Copyright (c) Yannik Marchand (kinnay), GPL-3.0
+      https://github.com/kinnay/LDN
+
+  pokefirered    — referenced for the Gen-3 data structures.
+      https://github.com/pret/pokefirered
+
+  PokeAPI        — species, move and item datasets, and sprite mirror.
+      https://github.com/PokeAPI/pokeapi
+
+The radio diagnostics in web/diag.py were informed by the approach in
+pokemon-ldn-trade by SantiagoPuertas (raw per-channel listening and real
+injection testing, rather than trusting what the driver declares):
+      https://github.com/SantiagoPuertas/pokemon-ldn-trade

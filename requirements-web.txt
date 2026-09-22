@@ -1,0 +1,2 @@
+# dashboard-only deps; kept separate so the upstream trade pins stay untouched
+flask==3.1.0
