@@ -411,6 +411,62 @@ async function tradeCard(p, role, label) {
   </div>`;
 }
 
+function pickControls() {
+  const n = party.length;
+  const many = $("#howMany"), which = $("#whichSlot");
+  const prevMany = +many.value || 1, prevWhich = +which.value || Math.min(1, n-1);
+  many.innerHTML = Array.from({length:n}, (_,i)=>
+    `<option value="${i+1}">${i+1}${i ? " Pokémon" : " Pokémon"}</option>`).join("");
+  many.value = Math.min(prevMany, n);
+  const count = +many.value;
+  // slots are offered ascending from the starting slot, so the start cannot
+  // run past the end of the party
+  const maxStart = n - count;
+  which.innerHTML = Array.from({length:maxStart+1}, (_,i)=>
+    `<option value="${i}">slot ${i+1} — ${party[i].nickname || party[i].name}</option>`).join("");
+  which.value = Math.min(prevWhich, maxStart);
+  const start = +which.value;
+  const names = party.slice(start, start+count).map(p=>p.nickname||p.name);
+  $("#pickNote").innerHTML = count === 1
+    ? `You will receive <b>${names[0]}</b>. A Gen III trade is symmetric — each side
+       offers one of its own party — so the simulated trainer nominates this slot,
+       and you pick one of yours on the console.`
+    : `<b>${count} trades in a row</b>: ${names.join(", ")}. The trade menu stays up
+       between them; give up one of your own each time.`;
+}
+["howMany","whichSlot"].forEach(id => {
+  const el = $("#"+id);
+  if (el) el.addEventListener("change", () => { pickControls(); renderPartyStrip(); });
+});
+
+// All six slots are transmitted: during the party-exchange phase the console
+// receives the simulated trainer's whole gPlayerParty and shows it on the trade
+// screen, exactly as it would a real partner's. The trade itself is still
+// one-for-one per round — each side nominates one of its OWN — so the
+// highlighted slots are the ones the simulated trainer will offer.
+function renderPartyStrip() {
+  const start = +$("#whichSlot").value || 0;
+  const count = +$("#howMany").value || 1;
+  const offered = new Set(Array.from({length:count}, (_,i)=>start+i));
+  $("#prepParty").innerHTML = Array.from({length:6}, (_,i)=>{
+    const p = party[i];
+    if (!p) return `<div class="pslot empty"><span class="n">${i+1}</span>
+                    <div class="ph"></div><div class="lv">empty</div></div>`;
+    const dex = DEX.find(x=>x.natdex===p.natdex) || {types:["normal"]};
+    const on = offered.has(i);
+    return `<div class="pslot ${on?"offered":"dim"}"
+                 style="--type:${TYPE_COLOR[dex.types[0]]}">
+      <span class="n">${i+1}</span>
+      ${on ? `<span class="tag">to you</span>` : ""}
+      <img src="${sprite(p.natdex,p.shiny)}" alt="">
+      <div class="nm">${p.nickname||p.name}${p.shiny?" ✦":""}</div>
+      <div class="lv">Lv ${p.level}</div></div>`;
+  }).join("");
+  $("#stripHint").textContent =
+    `all ${party.length} appear on your console's trade screen · `
+    + `${count === 1 ? "1 is offered to you" : `${count} offered across ${count} rounds`}`;
+}
+
 $("#sendBtn").addEventListener("click", async () => {
   if (party.length < 2) return;
   const out = party[0], inc = party[1];
@@ -418,22 +474,12 @@ $("#sendBtn").addEventListener("click", async () => {
   document.documentElement.style.setProperty("--type", TYPE_COLOR[d.types[0]] || "#9aa4b2");
   $("#prepContinue").disabled = true;
   $("#prepLog").textContent = "";
-  $("#prepPair").innerHTML = `<div class="tcard" data-role="loading"></div>`;
   prepStepsUI(0);
   $("#prepHint").textContent =
     `Preparing a party of ${party.length} for the simulated trainer…`;
   openModal("mPrep");
-  $("#prepPair").innerHTML =
-      (await tradeCard(inc, "in", "you receive this"))
-    + `<div class="swap">⇄</div>`
-    + `<div class="tcard out" data-role="you give one of yours">
-         <div class="youPick">
-           <div class="qmark">?</div>
-           <h4>You choose in-game</h4>
-           <p>Pick any Pokémon from your own party at the trade screen on your
-              Switch. Whatever you pick is saved to <code>out/</code>.</p>
-         </div>
-       </div>`;
+  pickControls();
+  renderPartyStrip();
 
   // write the .pk3 files while the reveal animates
   const tick = (n) => new Promise(r => setTimeout(() => { prepStepsUI(n); r(); }, 420));
@@ -461,17 +507,23 @@ function prepLog(line, kind="l") {
 // --- step 2: send -----------------------------------------------------------
 $("#prepContinue").addEventListener("click", async () => {
   closeModal("mPrep");
-  const inc = party[1];
+  const count = +$("#howMany").value || 1;
+  const start = +$("#whichSlot").value || 0;
+  const inc = party[start] || party[1];
   $("#sendHead").innerHTML =
     `<div class="mini"><img src="${sprite(inc.natdex,inc.shiny)}" alt="">
-       <div style="min-width:0"><div class="nm">Sending ${inc.nickname||inc.name}</div>
+       <div style="min-width:0"><div class="nm">Sending ${inc.nickname||inc.name}${
+         count>1 ? ` +${count-1} more` : ""}</div>
        <div class="sb">Lv ${inc.level} · you choose what to give on the console</div></div>
      </div>`;
   $("#sendOt").textContent = $("#ot").value || "EMU";
   $("#sendLog").textContent = "";
   statusUI("radio");
   openModal("mSend");
-  const { ok, j } = await post("/api/send/start", {});
+  const { ok, j } = await post("/api/send/start", {
+    trades: +$("#howMany").value || 1,
+    slot: +$("#whichSlot").value || 0,
+  });
   if (!ok) { sendLog(j.error || "could not start", "err"); }
 });
 $("#sendCancel").addEventListener("click", async () => {

@@ -441,7 +441,7 @@ def _run(cmd, tag):
     return rc, out
 
 
-def _send_worker(keep_radio):
+def _send_worker(keep_radio, trades=1, slot=1):
     """prepare -> radio -> (scan -> join/trade) on a loop until it lands."""
     try:
         set_phase("radio", "handing the wireless card to LDN")
@@ -469,7 +469,12 @@ def _send_worker(keep_radio):
 
             set_phase("join", "console found, joining")
             cmd = [sys.executable, os.path.join(ROOT, "frlgtrade.py"), "--live",
-                   "-o", os.path.join(OUT_DIR, out_name), "--verbose"]
+                   "-o", os.path.join(OUT_DIR, out_name), "--verbose",
+                   # A Gen-3 trade is symmetric: each side offers one of its
+                   # OWN party. The sim must nominate a slot, so --slot picks
+                   # which, and --trades runs several back to back (the trade
+                   # menu stays up), which is how you receive more than one.
+                   "--trades", str(trades), "--slot", str(slot)]
             comm = os.environ.get("FRLG_COMM_ID")
             if comm:
                 cmd += ["--comm-id", str(comm)]
@@ -518,10 +523,15 @@ def api_send_start():
     b = request.get_json(silent=True) or {}
     _send_cancel.clear()
     SEND.update(active=True, attempt=0, error=None, received=None,
-                started=time.time())
+                started=time.time(), trades=trades, slot=slot)
     set_phase("radio", "starting")
-    _send_thread = threading.Thread(target=_send_worker,
-                                    args=(bool(b.get("keep_radio")),), daemon=True)
+    n_party = len(party)
+    trades = max(1, min(6, int(b.get("trades") or 1), n_party))
+    slot = int(b.get("slot") if b.get("slot") is not None else 1)
+    slot = max(0, min(n_party - 1, slot))
+    _send_thread = threading.Thread(
+        target=_send_worker,
+        args=(bool(b.get("keep_radio")), trades, slot), daemon=True)
     _send_thread.start()
     return jsonify({"started": True})
 

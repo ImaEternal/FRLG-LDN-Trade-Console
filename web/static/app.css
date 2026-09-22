@@ -426,3 +426,38 @@ input[type=range]{width:100%;accent-color:var(--red);height:20px}
 .youPick h4{margin:0;font-size:15px;font-weight:700}
 .youPick p{margin:0;font-size:11.5px;color:var(--ink-3);line-height:1.55}
 .youPick code{background:var(--sunk);padding:1px 5px;border-radius:4px;font-size:10.5px}
+
+
+/* choosing how many of the simulated party to receive */
+.pickRow{display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:0 18px 4px;
+  align-items:end}
+.pickRow .pickNote{grid-column:1/-1;margin:2px 0 0;font-size:11.5px;color:var(--ink-3);
+  line-height:1.5}
+
+
+/* ---------- the whole party, as the console will see it ---------- */
+.partyStrip{padding:18px 18px 12px}
+.stripHead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:11px}
+.stripHead h5{margin:0;font-size:11px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:800}
+.stripHint{font-size:11.5px;color:var(--ink-3)}
+.slots6{display:grid;grid-template-columns:repeat(6,1fr);gap:9px}
+.pslot{border:1px solid var(--line);border-radius:12px;background:var(--surface-2);
+  padding:10px 7px;display:grid;justify-items:center;gap:5px;text-align:center;
+  position:relative;transition:.18s}
+.pslot .n{position:absolute;top:5px;left:7px;font-family:var(--font-m);font-size:9px;
+  color:var(--ink-3);font-weight:700}
+.pslot img{width:52px;height:52px;image-rendering:pixelated}
+.pslot .nm{font-size:11.5px;font-weight:650;line-height:1.2;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.pslot .lv{font-family:var(--font-m);font-size:9.5px;color:var(--ink-3)}
+.pslot.offered{background:color-mix(in srgb,var(--type) 10%,#fff);
+  border-color:color-mix(in srgb,var(--type) 55%,#fff);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--type) 18%,transparent)}
+.pslot.offered .tag{position:absolute;top:-8px;left:50%;transform:translateX(-50%);
+  background:var(--red);color:#fff;font-size:8.5px;font-weight:800;letter-spacing:.07em;
+  padding:2px 7px;border-radius:99px;white-space:nowrap}
+.pslot.empty{border-style:dashed;background:#fff;opacity:.6}
+.pslot.empty .ph{width:52px;height:52px;border-radius:10px;background:var(--sunk)}
+.pslot.dim{opacity:.62}
+@media(max-width:820px){ .slots6{grid-template-columns:repeat(3,1fr)} }

@@ -160,7 +160,25 @@
     <header><h3>Getting ready</h3>
       <button class="x" data-close="mPrep" title="close">&times;</button></header>
 
-    <div class="tradePair" id="prepPair"></div>
+    <div class="partyStrip">
+      <div class="stripHead">
+        <h5>The simulated trainer's party</h5>
+        <span class="stripHint" id="stripHint"></span>
+      </div>
+      <div class="slots6" id="prepParty"></div>
+    </div>
+
+    <div class="pickRow">
+      <div>
+        <label for="howMany">How many to receive</label>
+        <select id="howMany"></select>
+      </div>
+      <div>
+        <label for="whichSlot">Starting from slot</label>
+        <select id="whichSlot"></select>
+      </div>
+      <p class="pickNote" id="pickNote"></p>
+    </div>
 
     <div class="prepFoot">
       <div class="prepSteps" id="prepSteps"></div>
