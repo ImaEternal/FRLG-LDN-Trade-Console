@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(cd "$(dirname "$0")/.." && pwd)"
 if [[ " $* " == *" --live "* ]]; then
   [[ -s keys/prod.keys ]] || { echo "!! keys/prod.keys is missing or empty" >&2; exit 1; }
-  [[ -f "$(dirname "$0")/.env" ]] && . "$(dirname "$0")/.env"
+  ROOT="$(cd "$(dirname "$0")/.." && pwd)"; [[ -f "$ROOT/.env" ]] && . "$ROOT/.env"
   if ip route show default | grep -q "${FRLG_WIFI_IF:-wlan0}"; then
     echo "!! the wireless interface still holds the default route — run ./radio.sh take first" >&2
     exit 1

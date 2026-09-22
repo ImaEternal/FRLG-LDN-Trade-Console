@@ -13,6 +13,9 @@ services:
     restart: unless-stopped
     network_mode: host
     privileged: true
+    # Interface names etc. are machine-specific; without this the container
+    # falls back to eth0/wlan0 and can never see the radio free.
+    env_file: [.env]
     cap_add: [NET_ADMIN, NET_RAW]
     volumes:
       - ./keys/prod.keys:/root/.switch/prod.keys:ro
@@ -31,6 +34,9 @@ services:
     image: frlg-ldn-trade:latest
     network_mode: host
     privileged: true
+    # Interface names etc. are machine-specific; without this the container
+    # falls back to eth0/wlan0 and can never see the radio free.
+    env_file: [.env]
     cap_add: [NET_ADMIN, NET_RAW]
     volumes:
       - ./keys/prod.keys:/root/.switch/prod.keys:ro

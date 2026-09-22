@@ -10,9 +10,9 @@
 #
 # Interfaces come from .env (see .env.example); nothing is hardcoded.
 set -euo pipefail
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # shellcheck disable=SC1091
-[[ -f "$HERE/.env" ]] && . "$HERE/.env"
+[[ -f "$ROOT/.env" ]] && . "$ROOT/.env"
 WIFI="${FRLG_WIFI_IF:-wlan0}"
 WIRED_IF="${FRLG_WIRED_IF:-eth0}"
 WIRED_CON="${FRLG_WIRED_CON:-frlg-wired}"

@@ -33,13 +33,14 @@ Upstream is a command-line proof of concept: you hand-craft `.pk3` files, wrestl
 the Wi-Fi card away from NetworkManager, and read stack traces when it doesn't
 work. This adds:
 
+- **One button.** Build a party, press *Send to my game*, follow the prompts.
+  The radio handover, discovery, joining and retrying are handled for you.
 - **All 386 Gen III species** with in-game sprites, searchable
 - **Level, nature, nickname, held item, moves, IVs and EVs** — validated against
   what the games actually allow
 - **A party of six and a box** of saved builds
-- **Radio control from the browser** that won't cut your own network
-- **Diagnostics for when it fails** — the hard part of this project is never the
-  Pokémon, it's the radio
+- **Developer mode** puts the manual radio controls and diagnostics back when
+  you need them — the hard part of this project is never the Pokémon, it's the radio
 
 <div align="center">
 
@@ -62,6 +63,33 @@ work. This adds:
 <sub>Usable from a phone while you stand at the Switch</sub>
 
 </div>
+
+<div align="center">
+
+### Sending
+
+<img src="docs/screenshots/send-prepare.png" width="960" alt="Preparing the trade">
+
+<sub>Your whole party as the console will see it · choose how many rounds and which slot they start from · the <code>.pk3</code> files are written while you read</sub>
+
+<img src="docs/screenshots/send-progress.png" width="960" alt="Sending">
+
+<sub>Console instructions on the left, live progress on the right, and a technical log if you want it. Retries on a loop until the trade lands or you cancel.</sub>
+
+</div>
+
+### How a trade actually works
+
+Worth knowing, because it shapes the whole interface:
+
+- **Your entire party is transmitted.** During the party-exchange phase the full
+  `gPlayerParty` block goes across, so your Switch shows the simulated trainer's
+  whole team on the trade screen, exactly as it would a real partner's.
+- **But a trade is one-for-one, and symmetric.** Each side sends a cursor into
+  its *own* party. You pick one of yours on the console; the simulated trainer
+  nominates one of its own. Neither side browses the other's team and chooses.
+- **So to receive more than one, you do more rounds.** The trade menu stays up
+  between them. Pick up to six in the prepare screen.
 
 ### Details it gets right
 
@@ -143,13 +171,17 @@ handling take the card.
 
 ## Using it
 
-1. On the Switch: **Direct Corner → trade → Leader**, and *stay on the waiting screen*
-2. **Scan for console** — confirms your session is visible before you commit
-3. **Start trade** → approve the join from `EMU` on the Switch
-4. Walk to the **left chair**, pick what you're sending, accept
+1. Build a party in the dex, and **Write .pk3 files** is done for you
+2. On the Switch: **Direct Corner → trade → Leader**, and *stay on the waiting screen*
+3. Press **Send to my game**, check the preview, press **Continue**
+4. Approve the join from `EMU`, walk to the **left chair**, pick one of your own
+   Pokémon to give, accept
 5. Back at the trade menu, **cancel**, then walk out
 
-You receive whatever is in **slot 2**. What you traded away is saved to `out/`.
+Whatever you gave up is saved to `out/`. Press **Cancel** at any point to stop.
+
+Everything manual — write, free the radio, scan, listen, test card, start, stop —
+lives behind the **Developer mode** toggle.
 
 ## When it doesn't work
 
@@ -181,6 +213,7 @@ The most common failure, with four distinct causes — all fixed in [`patches/`]
 ```
 browser ──HTTP/SSE──► Flask (container, host network, privileged)
                         │
+                        ├── app.py        guided-send state machine + SSE
                         ├── pk3build.py   .pk3 construction: crypto, PID solving, stats
                         ├── scan.py       LDN discovery
                         ├── diag.py       raw capture + injection test

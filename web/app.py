@@ -521,14 +521,20 @@ def api_send_start():
     if len(party) < 2:
         return jsonify({"error": "prepare the party first"}), 400
     b = request.get_json(silent=True) or {}
-    _send_cancel.clear()
-    SEND.update(active=True, attempt=0, error=None, received=None,
-                started=time.time(), trades=trades, slot=slot)
-    set_phase("radio", "starting")
+    # Work the parameters out BEFORE recording them; a previous edit had the
+    # SEND.update() above these lines, which raised UnboundLocalError and made
+    # the second dialog fail with a 500 the moment you pressed Continue.
     n_party = len(party)
     trades = max(1, min(6, int(b.get("trades") or 1), n_party))
     slot = int(b.get("slot") if b.get("slot") is not None else 1)
     slot = max(0, min(n_party - 1, slot))
+    # ...and do not let the range run off the end of the party.
+    trades = max(1, min(trades, n_party - slot))
+
+    _send_cancel.clear()
+    SEND.update(active=True, attempt=0, error=None, received=None,
+                started=time.time(), trades=trades, slot=slot)
+    set_phase("radio", "starting")
     _send_thread = threading.Thread(
         target=_send_worker,
         args=(bool(b.get("keep_radio")), trades, slot), daemon=True)
