@@ -45,17 +45,21 @@ work. This adds:
 
 ### Builder
 
-<img src="docs/screenshots/builder.png" width="820" alt="Builder">
+<img src="docs/screenshots/builder.png" width="900" alt="Builder">
 
-<sub>Legal level-up moves for the selected species · IVs and EVs with the 510 cap enforced · held items · live stat bars</sub>
+<sub>Level, nature, nickname, OT, held item, friendship and shininess — with legal level-up moves, IVs and EVs behind the two panels below</sub>
 
-### Party, box and console
+### Party and controls
 
-<img src="docs/screenshots/bay.png" width="440" alt="Healing bay">
-&nbsp;&nbsp;
-<img src="docs/screenshots/mobile.png" width="215" alt="Mobile">
+<img src="docs/screenshots/bay.png" width="900" alt="Healing bay">
 
-<sub>Six sockets with type-coloured rings and a live trade log &nbsp;·&nbsp; responsive, so you can drive it from a phone while stood at the Switch</sub>
+<sub>Six sockets with type-coloured rings · radio control and diagnostics · a live trade log</sub>
+
+### Responsive
+
+<img src="docs/screenshots/mobile.png" width="900" alt="Mobile">
+
+<sub>Usable from a phone while you stand at the Switch</sub>
 
 </div>
 
