@@ -254,10 +254,16 @@ async function poll() {
     const el = $("#"+id);
     if (el) { el.disabled = Boolean(scanWhy); el.title = scanWhy || tip; }
   }
+  const sendWhy = !s.keys_present ? "keys/prod.keys is empty"
+                : party.length < 2 ? "add at least 2 Pokémon to the party"
+                : s.trade_running ? "already running" : "";
+  const sendB = $("#sendBtn");
+  if (sendB) { sendB.disabled = Boolean(sendWhy); sendB.title = sendWhy || "Send to your game"; }
+  $("#startWhy").textContent = sendWhy ? "\u2014 " + sendWhy : "";
   const sb = $("#startBtn");
   sb.disabled = Boolean(why);
   sb.title = why || "Start the trade";
-  $("#startWhy").textContent = why ? "\u2014 " + why : "";
+  sb.dataset.why = why;
   $("#stopBtn").disabled  = !s.trade_running;
   // Hydrate the bay from disk on first load. Without this the page shows an
   // empty bay while PARTY*.pk3 exist, and the buttons contradict the UI.
@@ -290,7 +296,24 @@ function log(line, kind="l") {
 }
 new EventSource("/api/logs").onmessage = e => {
   const m = JSON.parse(e.data);
-  log(m.line, {cmd:"cmd",ok:"ok",info:"info",done:"done",err:"err"}[m.kind] || "l");
+  if (m.kind === "state") {                 // guided-send progress
+    let st = {};
+    try { st = JSON.parse(m.line); } catch { return; }
+    sendPhase = st.phase; sendActive = st.active;
+    statusUI(st.phase, st.attempt, st.detail);
+    if (st.detail) sendLog(st.detail, "info");
+    if (st.phase === "done") {
+      $("#sendName").textContent = "Trade complete";
+      $("#sendCancel").textContent = "Close";
+      $("#sendCancel").onclick = () => { closeModal("mSend"); poll(); };
+    }
+    poll();
+    return;
+  }
+  const cls = {cmd:"cmd",ok:"ok",info:"info",done:"done",err:"err"}[m.kind] || "l";
+  log(m.line, cls);
+  sendLog(m.line, cls);
+  if (typeof prepLog === "function" && !$("#mPrep").hidden) prepLog(m.line, cls);
   if (m.kind === "done" || m.kind === "ok") poll();
 };
 
@@ -306,3 +329,163 @@ new EventSource("/api/logs").onmessage = e => {
   renderDex(); renderParty(); renderBox(); poll(); setInterval(poll, 4000);
   document.querySelector('.row[data-id="25"]')?.click();
 })();
+
+/* ============================================================================
+   Guided send. One button drives the whole sequence; the manual controls stay
+   available behind Developer mode for when it goes wrong.
+   ========================================================================== */
+const PHASE_STEPS = [
+  ["radio", "Freeing the wireless card",
+   "Moving this machine onto its wired link so the card can be handed to LDN."],
+  ["scan",  "Finding your console",
+   "Listening on every LDN channel for a FireRed/LeafGreen trade session."],
+  ["join",  "Joining the session",
+   "Associating with the console and authenticating as a second player."],
+  ["trade", "Trading",
+   "Follow the steps on your Switch — the trade happens in-game."],
+];
+let sendPhase = "idle", sendActive = false;
+
+const openModal  = id => { $("#"+id).hidden = false; document.body.style.overflow="hidden"; };
+const closeModal = id => { $("#"+id).hidden = true;  document.body.style.overflow=""; };
+document.addEventListener("click", e => {
+  const c = e.target.dataset?.close; if (c) closeModal(c);
+});
+
+// --- developer mode ---------------------------------------------------------
+const DEV_KEY = "frlg.devmode";
+function applyDev(on) {
+  $("#devPanel").hidden = !on;
+  try { localStorage.setItem(DEV_KEY, on ? "1" : "0"); } catch {}
+}
+$("#devMode").addEventListener("change", e => applyDev(e.target.checked));
+try {
+  const on = localStorage.getItem(DEV_KEY) === "1";
+  $("#devMode").checked = on; applyDev(on);
+} catch { applyDev(false); }
+
+// --- step 1: prepare --------------------------------------------------------
+const PREP_STEPS = [
+  "Checking your console keys",
+  "Building the Pokémon data",
+  "Writing the trade files",
+];
+function prepStepsUI(done) {
+  $("#prepSteps").innerHTML = PREP_STEPS.map((t,i)=>
+    `<div class="prepStep${i<done?" on":""}"><span class="tick"></span>${t}</div>`).join("");
+}
+// A trade has two sides. PARTY1 is what the simulated trainer offers up;
+// PARTY2 is the one that ends up in your game. Showing only one of them left
+// the most important half — what you actually receive — off the screen.
+async function tradeCard(p, role, label) {
+  if (!p) return `<div class="tcard" data-role="${label}"><div class="hd">
+      <div class="art"></div><div><h4>—</h4>
+      <div class="meta">add a second Pokémon to the party</div></div></div></div>`;
+  const dex = DEX.find(x => x.natdex === p.natdex) || {types:["normal"]};
+  let m = null;
+  try {
+    const r = await fetch("/api/preview", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body: JSON.stringify(p)});
+    if (r.ok) m = await r.json();
+  } catch {}
+  const types = (m?.types || dex.types || []).map(badge).join("");
+  const moves = (m?.moves || []).map(x=>`<span class="mv">${x}</span>`).join("");
+  return `<div class="tcard ${role}" data-role="${label}"
+               style="--type:${TYPE_COLOR[(dex.types||["normal"])[0]]}">
+    <div class="hd">
+      <div class="art"><img src="${sprite(p.natdex, p.shiny)}" alt=""></div>
+      <div style="min-width:0">
+        <h4>${p.nickname || p.name}${p.shiny?' <span style="color:#f5a623">✦</span>':""}</h4>
+        <div class="meta">#${String(p.natdex).padStart(3,"0")} · Lv ${p.level} · ${m?.nature || p.nature || ""}</div>
+      </div>
+    </div>
+    <div class="row">${types}</div>
+    <div class="kv">
+      <b>Item</b><span>${m?.item_name && m.item_name !== "None" ? m.item_name : "none"}</span>
+      <b>OT</b><span>${$("#ot").value || "EMU"}</span>
+      ${m?.pid ? `<b>PID</b><span style="font-family:var(--font-m)">${m.pid}</span>` : ""}
+    </div>
+    <div class="row">${moves}</div>
+  </div>`;
+}
+
+$("#sendBtn").addEventListener("click", async () => {
+  if (party.length < 2) return;
+  const out = party[0], inc = party[1];
+  const d = DEX.find(x => x.natdex === inc.natdex) || {types:["normal"]};
+  document.documentElement.style.setProperty("--type", TYPE_COLOR[d.types[0]] || "#9aa4b2");
+  $("#prepContinue").disabled = true;
+  $("#prepLog").textContent = "";
+  $("#prepPair").innerHTML = `<div class="tcard" data-role="loading"></div>`;
+  prepStepsUI(0);
+  $("#prepHint").textContent = "Building both sides of the trade…";
+  openModal("mPrep");
+  $("#prepPair").innerHTML =
+      (await tradeCard(out, "out", "you send"))
+    + `<div class="swap">⇄</div>`
+    + (await tradeCard(inc, "in", "you receive"));
+
+  // write the .pk3 files while the reveal animates
+  const tick = (n) => new Promise(r => setTimeout(() => { prepStepsUI(n); r(); }, 420));
+  await tick(1);
+  const { ok, j } = await post("/api/party", {slots: party, ot: $("#ot").value || "EMU"});
+  await tick(2);
+  if (!ok) {
+    prepLog(j.error || "could not build the party", "err");
+    return;
+  }
+  (j.party||[]).forEach(m => prepLog(
+    `built ${m.file}: ${m.name} Lv${m.level}${m.shiny?" shiny":""}`, "ok"));
+  await tick(3);
+  $("#prepHint").textContent =
+    "Ready. Get your console to the Direct Corner trade screen, then press Continue.";
+  $("#prepContinue").disabled = false;
+  poll();
+});
+function prepLog(line, kind="l") {
+  const c = $("#prepLog"); const d = document.createElement("div");
+  d.className = kind; d.textContent = line; c.appendChild(d); c.scrollTop = c.scrollHeight;
+}
+
+// --- step 2: send -----------------------------------------------------------
+$("#prepContinue").addEventListener("click", async () => {
+  closeModal("mPrep");
+  const out = party[0], inc = party[1];
+  const mini = (p, cap) => `<div class="mini"><img src="${sprite(p.natdex,p.shiny)}" alt="">
+      <div style="min-width:0"><div class="nm">${p.nickname||p.name}</div>
+      <div class="sb">${cap} · Lv ${p.level}</div></div></div>`;
+  $("#sendHead").innerHTML =
+    mini(out, "you send") + `<span class="arrow">⇄</span>` + mini(inc, "you receive");
+  $("#sendOt").textContent = $("#ot").value || "EMU";
+  $("#sendLog").textContent = "";
+  statusUI("radio");
+  openModal("mSend");
+  const { ok, j } = await post("/api/send/start", {});
+  if (!ok) { sendLog(j.error || "could not start", "err"); }
+});
+$("#sendCancel").addEventListener("click", async () => {
+  await post("/api/send/cancel");
+  $("#sendCancel").textContent = "Close";
+  $("#sendCancel").onclick = () => closeModal("mSend");
+});
+function statusUI(phase, attempt, detail) {
+  const order = PHASE_STEPS.map(p => p[0]);
+  const at = order.indexOf(phase);
+  const done = phase === "done";
+  $("#statuses").innerHTML = PHASE_STEPS.map(([k,label,blurb],i)=>{
+    const cls = done || i < at ? "ok" : (i === at ? "doing" : "");
+    const ico = cls === "ok" ? "✓" : (i + 1);
+    const sub = (cls === "doing" && detail) ? detail : blurb;
+    return `<div class="stg ${cls}">
+      <div class="lbl"><span class="ico">${ico}</span>${label}</div>
+      <div class="track"><i></i></div>
+      <div class="sub">${sub}</div></div>`;
+  }).join("");
+  $("#attemptN").textContent = attempt ? `attempt ${attempt}` : "";
+}
+function sendLog(line, kind="l") {
+  const c = $("#sendLog"); if (!c) return;
+  const d = document.createElement("div"); d.className = kind; d.textContent = line;
+  c.appendChild(d); c.scrollTop = c.scrollHeight;
+  while (c.children.length > 400) c.removeChild(c.firstChild);
+}

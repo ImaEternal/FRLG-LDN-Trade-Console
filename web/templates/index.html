@@ -114,20 +114,31 @@
       <div class="bay-rail"></div>
     </div>
     <div class="pad" style="border-top:1px solid var(--line)">
-      <div class="btnrow">
-        <button class="btn" id="writeBtn" disabled>Write .pk3 files</button>
-        <button class="btn" id="radioBtn">Free the radio</button>
-        <button class="btn" id="scanBtn">Scan for console</button>
-        <button class="btn" id="listenBtn">Listen (raw)</button>
-        <button class="btn" id="injectBtn">Test card</button>
-        <button class="btn go" id="startBtn" disabled>Start trade</button>
-        <button class="btn" id="stopBtn" disabled>Stop</button>
-      </div>
+      <button class="btn send" id="sendBtn" disabled>Send to my game</button>
       <div class="why" id="startWhy"></div>
-      <div class="note" style="padding:11px 0 0">
-        You receive <b>slot 2</b>; whatever you trade away is saved to <code>out/</code>.
+
+      <label class="devtog" for="devMode">
+        <input type="checkbox" id="devMode">
+        <span>Developer mode</span>
+        <small>manual radio control, diagnostics and raw output</small>
+      </label>
+
+      <div id="devPanel" hidden>
+        <div class="btnrow">
+          <button class="btn" id="writeBtn" disabled>Write .pk3 files</button>
+          <button class="btn" id="radioBtn">Free the radio</button>
+          <button class="btn" id="scanBtn">Scan for console</button>
+          <button class="btn" id="listenBtn">Listen (raw)</button>
+          <button class="btn" id="injectBtn">Test card</button>
+          <button class="btn go" id="startBtn" disabled>Start trade</button>
+          <button class="btn" id="stopBtn" disabled>Stop</button>
+        </div>
+        <div class="note" style="padding:11px 0 0">
+          You receive <b>slot 2</b>; whatever you trade away is saved to <code>out/</code>.
+        </div>
       </div>
     </div>
+
     <h2 style="border-top:1px solid var(--line)">Console</h2>
     <div class="console" id="console"><span class="l">waiting…</span></div>
     <h2 style="border-top:1px solid var(--line)">On the Switch</h2>
@@ -141,6 +152,61 @@
     <div class="note" id="received"></div>
   </section>
 </main>
+
+<!-- step 1: prepare — reveal the Pokemon while the .pk3 files are written -->
+<div class="modal" id="mPrep" hidden>
+  <div class="sheet wide">
+    <header><h3>Getting ready</h3>
+      <button class="x" data-close="mPrep" title="close">&times;</button></header>
+
+    <div class="tradePair" id="prepPair"></div>
+
+    <div class="prepFoot">
+      <div class="prepSteps" id="prepSteps"></div>
+      <p class="hint" id="prepHint">Writing the trade files…</p>
+    </div>
+
+    <details class="tech"><summary>Technical details</summary>
+      <div class="console sm" id="prepLog"></div></details>
+    <footer>
+      <button class="btn" data-close="mPrep">Back</button>
+      <button class="btn send" id="prepContinue" disabled>Continue</button>
+    </footer>
+  </div>
+</div>
+
+<!-- step 2: sending — instructions left, live status right, preview on top -->
+<div class="modal" id="mSend" hidden>
+  <div class="sheet wide">
+    <header>
+      <div class="sendHead" id="sendHead"></div>
+      <button class="x" data-close="mSend" title="close">&times;</button>
+    </header>
+    <div class="sendBody">
+      <div class="howto">
+        <h5>On your Switch</h5>
+        <ol class="steps tight">
+          <li>Open the <b>Direct Corner</b> and choose to trade</li>
+          <li>Be the <b>Leader</b>, and stay on the waiting screen</li>
+          <li>Approve the join request from <b id="sendOt">EMU</b></li>
+          <li>Walk to the <b>left chair</b> — movement may be laggy</li>
+          <li>Pick the Pokémon you are sending away, and accept</li>
+          <li>Back at the trade menu, <b>cancel</b>, then walk out</li>
+        </ol>
+        <p class="hint">Keep the console on the waiting screen the whole time —
+           it only advertises while you are stood there.</p>
+      </div>
+      <div class="statuses" id="statuses"></div>
+    </div>
+    <details class="tech"><summary>Technical details</summary>
+      <div class="console sm" id="sendLog"></div></details>
+    <footer>
+      <div class="attempt" id="attemptN"></div>
+      <button class="btn danger" id="sendCancel">Cancel</button>
+    </footer>
+  </div>
+</div>
+
 <script src="/static/app.js"></script>
 </body>
 </html>

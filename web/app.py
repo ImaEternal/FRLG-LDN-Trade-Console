@@ -33,6 +33,26 @@ app = Flask(__name__, static_folder="static", template_folder="templates")
 # canonical HP/Atk/Def/SpA/SpD/Spe order the games use.
 app.json.sort_keys = False
 
+# ---- the guided send: one button, orchestrated ----------------------------
+# The manual flow needs five buttons pressed in the right order (write, free
+# the radio, scan, start, restore). Getting the order wrong produces errors
+# that look like faults. This runs the whole sequence and reports one state.
+SEND = {
+    "active": False, "phase": "idle", "attempt": 0, "detail": "",
+    "started": None, "error": None, "received": None,
+}
+_send_cancel = threading.Event()
+_send_thread = None
+
+PHASES = ["prepare", "radio", "scan", "join", "trade", "done"]
+
+
+def set_phase(phase, detail="", **kw):
+    SEND.update(phase=phase, detail=detail, **kw)
+    publish(json.dumps({"phase": phase, "detail": detail,
+                        "attempt": SEND["attempt"], "active": SEND["active"]}), "state")
+
+
 # ---- live log plumbing -----------------------------------------------------
 _log_subs: list[queue.Queue] = []
 _log_lock = threading.Lock()
@@ -384,6 +404,140 @@ def api_diag(mode):
         publish(f"diagnostic finished rc={p.wait()}", "done")
     threading.Thread(target=pump, args=(_proc,), daemon=True).start()
     return jsonify({"started": True})
+
+
+def _wait_radio(free=True, timeout=45):
+    """Ask the host helper to take or return the radio, then wait for it."""
+    want = "take" if free else "give-back"
+    with open(os.path.join(CTL_DIR, "request"), "w") as f:
+        f.write(want + "\n")
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if _send_cancel.is_set():
+            return False
+        if radio_state()["ready_for_trade"] == free:
+            return True
+        time.sleep(1.5)
+    return radio_state()["ready_for_trade"] == free
+
+
+def _run(cmd, tag):
+    """Run a child process, streaming its output, honouring cancel."""
+    global _proc
+    env = {**os.environ,
+           "FRLG_SCAN_DWELL": os.environ.get("FRLG_SCAN_DWELL", "0.60"),
+           "FRLG_JOIN_ATTEMPTS": os.environ.get("FRLG_JOIN_ATTEMPTS", "8")}
+    _proc = subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, text=True, bufsize=1, env=env)
+    out = []
+    for line in _proc.stdout:
+        line = line.rstrip("\n")
+        out.append(line)
+        publish(line)
+        if _send_cancel.is_set():
+            _proc.terminate()
+            break
+    rc = _proc.wait()
+    return rc, out
+
+
+def _send_worker(keep_radio):
+    """prepare -> radio -> (scan -> join/trade) on a loop until it lands."""
+    try:
+        set_phase("radio", "handing the wireless card to LDN")
+        if not _wait_radio(True):
+            SEND["error"] = ("Could not free the radio. There must be a working "
+                             "second network path, or the host refuses to release it.")
+            set_phase("failed"); return
+
+        party = sorted(f for f in os.listdir(PK3_DIR) if re.fullmatch(r"PARTY\d\.pk3", f))
+        out_name = "received.pk3"
+        while not _send_cancel.is_set():
+            SEND["attempt"] += 1
+            set_phase("scan", "listening for your console")
+            rc, out = _run([sys.executable, os.path.join(APP_DIR, "scan.py")], "scan")
+            if _send_cancel.is_set():
+                break
+            found = any("RESULT: FRLG" in l for l in out)
+            if not found:
+                set_phase("scan", "no session yet — keep the console on the "
+                                  "trade waiting screen; retrying")
+                for _ in range(8):
+                    if _send_cancel.is_set(): break
+                    time.sleep(1)
+                continue
+
+            set_phase("join", "console found, joining")
+            cmd = [sys.executable, os.path.join(ROOT, "frlgtrade.py"), "--live",
+                   "-o", os.path.join(OUT_DIR, out_name), "--verbose"]
+            comm = os.environ.get("FRLG_COMM_ID")
+            if comm:
+                cmd += ["--comm-id", str(comm)]
+            cmd += [os.path.join(PK3_DIR, p) for p in party]
+            set_phase("trade", "trading — follow the steps on your console")
+            rc, out = _run(cmd, "trade")
+            if _send_cancel.is_set():
+                break
+            if rc == 0:
+                SEND["received"] = out_name
+                set_phase("done", "trade complete")
+                return
+            cause = next((l for l in reversed(out)
+                          if l.strip() and not l.startswith((" ", "\t"))
+                          and "Traceback" not in l and "^^^" not in l), "")
+            set_phase("join", f"attempt {SEND['attempt']} did not land — retrying")
+            publish(cause or f"exited rc={rc}", "err")
+            for _ in range(5):
+                if _send_cancel.is_set(): break
+                time.sleep(1)
+
+        if _send_cancel.is_set():
+            set_phase("cancelled", "stopped")
+    except Exception as e:
+        SEND["error"] = f"{type(e).__name__}: {e}"
+        set_phase("failed", SEND["error"])
+    finally:
+        SEND["active"] = False
+        if not keep_radio:
+            _wait_radio(False, timeout=30)
+        publish(json.dumps({"phase": SEND["phase"], "active": False,
+                            "attempt": SEND["attempt"]}), "state")
+
+
+@app.post("/api/send/start")
+def api_send_start():
+    global _send_thread
+    if SEND["active"]:
+        return jsonify({"error": "already sending"}), 409
+    st = radio_state()
+    if not st["keys_present"]:
+        return jsonify({"error": "keys/prod.keys is missing or empty"}), 400
+    party = sorted(f for f in os.listdir(PK3_DIR) if re.fullmatch(r"PARTY\d\.pk3", f))
+    if len(party) < 2:
+        return jsonify({"error": "prepare the party first"}), 400
+    b = request.get_json(silent=True) or {}
+    _send_cancel.clear()
+    SEND.update(active=True, attempt=0, error=None, received=None,
+                started=time.time())
+    set_phase("radio", "starting")
+    _send_thread = threading.Thread(target=_send_worker,
+                                    args=(bool(b.get("keep_radio")),), daemon=True)
+    _send_thread.start()
+    return jsonify({"started": True})
+
+
+@app.post("/api/send/cancel")
+def api_send_cancel():
+    _send_cancel.set()
+    if _proc is not None and _proc.poll() is None:
+        _proc.terminate()
+    publish("cancelled by you", "info")
+    return jsonify({"cancelled": True})
+
+
+@app.get("/api/send/state")
+def api_send_state():
+    return jsonify({**SEND, "phases": PHASES})
 
 
 @app.post("/api/trade/stop")
