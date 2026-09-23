@@ -303,7 +303,8 @@ new EventSource("/api/logs").onmessage = e => {
     statusUI(st.phase, st.attempt, st.detail);
     if (st.detail) sendLog(st.detail, "info");
     if (st.phase === "done") {
-      $("#sendName").textContent = "Trade complete";
+      const nm = $("#sendHead .nm");
+      if (nm) nm.textContent = "Trade complete";
       $("#sendCancel").textContent = "Close";
       $("#sendCancel").onclick = () => { closeModal("mSend"); poll(); };
     }
@@ -327,6 +328,8 @@ new EventSource("/api/logs").onmessage = e => {
   STATS.forEach(k=>{ ivs[k]=31; evs[k]=0; });
   ivEvUI();
   renderDex(); renderParty(); renderBox(); poll(); setInterval(poll, 4000);
+  // Belt and braces: if SSE drops, the dialog still tracks the server.
+  setInterval(() => { if (!$("#mSend").hidden) syncSendState(); }, 3000);
   document.querySelector('.row[data-id="25"]')?.click();
 })();
 
@@ -520,17 +523,51 @@ $("#prepContinue").addEventListener("click", async () => {
   $("#sendLog").textContent = "";
   statusUI("radio");
   openModal("mSend");
+  resetCancelBtn();
   const { ok, j } = await post("/api/send/start", {
     trades: +$("#howMany").value || 1,
     slot: +$("#whichSlot").value || 0,
   });
-  if (!ok) { sendLog(j.error || "could not start", "err"); }
+  if (!ok) {
+    // 409 means a send is ALREADY running — usually one left over from an
+    // earlier attempt. Showing a dead dialog that never updates is the worst
+    // possible response, so adopt the running send instead of pretending it
+    // failed.
+    if (/already sending/i.test(j.error || "")) {
+      sendLog("a send was already running — showing that one", "info");
+    } else {
+      sendLog(j.error || "could not start", "err");
+      $("#sendCancel").textContent = "Close";
+    }
+  }
+  syncSendState();
 });
 $("#sendCancel").addEventListener("click", async () => {
   await post("/api/send/cancel");
   $("#sendCancel").textContent = "Close";
   $("#sendCancel").onclick = () => closeModal("mSend");
 });
+function resetCancelBtn() {
+  const c = $("#sendCancel");
+  c.textContent = "Cancel";
+  c.onclick = null;                       // the delegated listener takes over
+}
+
+// Ask the server what it is actually doing. The dialog is otherwise driven
+// only by SSE, so anything that happened before it opened is invisible.
+async function syncSendState() {
+  try {
+    const st = await (await fetch("/api/send/state")).json();
+    sendPhase = st.phase; sendActive = st.active;
+    statusUI(st.phase, st.attempt, st.detail);
+    if (!st.active && st.phase !== "done") {
+      $("#sendCancel").textContent = "Close";
+      $("#sendCancel").onclick = () => { closeModal("mSend"); poll(); };
+    }
+    if (st.error) sendLog(st.error, "err");
+  } catch {}
+}
+
 function statusUI(phase, attempt, detail) {
   const order = PHASE_STEPS.map(p => p[0]);
   const at = order.indexOf(phase);

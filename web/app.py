@@ -512,6 +512,11 @@ def _send_worker(keep_radio, trades=1, slot=1):
 @app.post("/api/send/start")
 def api_send_start():
     global _send_thread
+    # A send is only really active if its worker thread is still alive. Without
+    # this a crashed or orphaned worker leaves active=True forever and every
+    # later attempt gets a 409 it can never clear.
+    if SEND["active"] and not (_send_thread and _send_thread.is_alive()):
+        SEND["active"] = False
     if SEND["active"]:
         return jsonify({"error": "already sending"}), 409
     st = radio_state()
