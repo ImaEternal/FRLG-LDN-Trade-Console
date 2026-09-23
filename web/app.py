@@ -84,6 +84,16 @@ def sh(cmd):
     except Exception:
         return ""
 
+def resolve_phy(iface):
+    """phy index is not stable: reloading the driver renumbers it, and a
+    hardcoded phy0 then fails with 'No wiphy found'. Read it off the
+    interface each time."""
+    out = subprocess.run(["iw", "dev", iface, "info"],
+                         capture_output=True, text=True).stdout
+    m = re.search(r"wiphy (\d+)", out)
+    return f"phy{m.group(1)}" if m else os.environ.get("FRLG_PHY", "phy0")
+
+
 WIFI_IF  = os.environ.get("FRLG_WIFI_IF", "wlan0")
 WIRED_IF = os.environ.get("FRLG_WIRED_IF", "eth0")
 
@@ -319,6 +329,8 @@ def api_trade_start():
     cmd += [os.path.join(PK3_DIR, p) for p in party]
     publish("$ " + " ".join(cmd), "cmd")
     env = {**os.environ,
+           "FRLG_IFNAME": os.environ.get("FRLG_IFNAME", "ldnclient"),
+           "FRLG_PHY": resolve_phy(WIFI_IF),
            "FRLG_SCAN_DWELL": str(b.get("dwell") or 0.60),
            "FRLG_JOIN_ATTEMPTS": str(int(b.get("attempts") or 1)),
            "FRLG_JOIN_SETTLE": str(b.get("settle") or 4.0),
@@ -424,7 +436,8 @@ def _wait_radio(free=True, timeout=45):
     return radio_state()["ready_for_trade"] == free
 
 
-LDN_VIFS = ("ldn", "ldnclient", "ldndiag0")
+LDN_VIFS = ("ldn", "ldn-mon", "ldn-tap", "ldnclient", "ldndiag0") \
+            + tuple(f"ldnc{i}" for i in range(10))
 
 
 def _clear_ldn_vifs():
@@ -448,6 +461,8 @@ def _run(cmd, tag):
     """Run a child process, streaming its output, honouring cancel."""
     global _proc
     env = {**os.environ,
+           "FRLG_IFNAME": os.environ.get("FRLG_IFNAME", "ldnclient"),
+           "FRLG_PHY": resolve_phy(WIFI_IF),
            "FRLG_SCAN_DWELL": os.environ.get("FRLG_SCAN_DWELL", "0.60"),
            # ONE in-process attempt. nl80211 frame registrations belong to
            # the netlink SOCKET, which lives as long as the process, and the
@@ -506,6 +521,9 @@ def _send_worker(keep_radio, trades=1, slot=1):
             if comm:
                 cmd += ["--comm-id", str(comm)]
             cmd += [os.path.join(PK3_DIR, p) for p in party]
+            # Rotate the station interface name so each attempt gets a fresh
+            # ifindex and cannot inherit a registration left by a killed run.
+            os.environ["FRLG_IFNAME"] = f"ldnc{SEND['attempt'] % 10}"
             rc, out = _run(cmd, "trade")
             if _send_cancel.is_set():
                 break

@@ -1,5 +1,5 @@
 --- frlgsim/transport.py	2026-09-22 01:19:56.091988067 -0400
-+++ frlgsim/transport.py	2026-09-21 22:14:31.385698331 -0400
++++ frlgsim/transport.py	2026-09-23 14:34:53.817433547 -0400
 @@ -15,6 +15,7 @@
  import json
  import socket
@@ -8,7 +8,39 @@
  import subprocess
  import threading
  import time
-@@ -321,13 +322,27 @@
+@@ -114,6 +115,9 @@
+ 
+ # LDN virtual interfaces to clear off the radio (ported from the bridge tooling).
+ LDN_VIFS = {"ldn", "ldn-mon", "ldn-tap", "ldnclient"}
++# Per-attempt station names (see LiveTransport.ifname) so cleanup still finds
++# them all.
++LDN_VIFS |= {f"ldnc{i}" for i in range(10)}
+ 
+ 
+ # --- radio / interface cleanup (the library needs the radio free of stale vifs) -------------
+@@ -290,13 +294,19 @@
+ 
+     def __init__(self, password=None, nickname="EMU", keys_path="~/.switch/prod.keys",
+                  local_comm_id=None, scene_id=None, app_version=None,
+-                 phyname="phy0", ifname="ldnclient", log=print):
++                 phyname="phy0", ifname=None, log=print):
+         self.info = getattr(log, "info", log)   # clean milestone sink (default-mode narration)
+         self.password = password if password else GBA_APP_PASSPHRASE
+         self.nickname = nickname
+         self.keys_path = keys_path
+         self.phyname = phyname
+-        self.ifname = ifname
++        # The station vif name is fixed upstream ("ldnclient"). nl80211 ACTION
++        # frame registrations hang off the interface, and a socket killed
++        # mid-run can leave one behind on that ifindex -- the next attempt then
++        # dies with "Match already configured" before reaching the console.
++        # Allowing a per-attempt name means each join gets a brand new ifindex
++        # that cannot inherit anyone else's registration.
++        self.ifname = ifname or os.environ.get("FRLG_IFNAME") or "ldnclient"
+         if local_comm_id is not None:
+             self.LOCAL_COMMUNICATION_ID = local_comm_id
+         if scene_id is not None:
+@@ -321,13 +331,27 @@
          self._err = None
  
      # -- LDN join runs in a trio thread that keeps the connection alive -------
@@ -37,7 +69,7 @@
          last_err = None
          for attempt in range(1, attempts + 1):
              free_radio({self.phyname}, self.log)        # clear the radio before each join attempt
-@@ -350,7 +365,17 @@
+@@ -350,7 +374,17 @@
                  return self
              self._stop.set()
              if self._thread is not None:
@@ -56,7 +88,69 @@
              if attempt < attempts:
                  self.log(f"[live] retrying LDN join in {settle}s "
                           f"(attempt {attempt + 1}/{attempts})...")
-@@ -370,7 +395,18 @@
+@@ -367,10 +401,80 @@
+             self._ready.set()
+             return
+ 
++        # mt7925e (and some other drivers) answer the very first
++        # NL80211_CMD_REGISTER_FRAME for ACTION frames with
++        #   EALREADY / "Match already configured"
++        # even on a freshly reloaded driver with a brand-new interface --
++        # verified by reloading the module and using an unused vif name. The
++        # kernel is telling us the match we asked for is already in place,
++        # which is the state we wanted; upstream treats it as fatal and the
++        # join dies before it ever reaches the console. Accept it and carry on.
++        import ldn.wlan as _wlan_mod
++        if not getattr(_wlan_mod.Interface, "_frlg_tolerant", False):
++            _orig_register = _wlan_mod.Interface._register_frame
++
++            async def _register_frame_tolerant(self, type, match=b""):
++                try:
++                    await _orig_register(self, type, match)
++                except (BlockingIOError, OSError) as e:
++                    if getattr(e, "errno", None) not in (114, -114):
++                        raise
++                    # EALREADY: the registration already exists. Proceed.
++
++            _wlan_mod.Interface._register_frame = _register_frame_tolerant
++            _wlan_mod.Interface._frlg_tolerant = True
++
++        # After associating, the console must notice us and rebroadcast its
++        # advertisement with our MAC in the participant list -- that is where
++        # our IP comes from. The library allows ONE SECOND for that round trip
++        # and then gives up with "Failed to obtain IP address after joining
++        # network (timeout)", which is also how upstream's known-bad cards
++        # present ("unable to be assigned ip"). A beacon interval plus the
++        # console's own processing can easily exceed a second. Wait longer.
++        import trio as _trio
++        if not getattr(ldn.STANetwork, "_frlg_patient", False):
++            _orig_init_net = ldn.STANetwork._initialize_network
++
++            async def _initialize_network_patient(self):
++                wait = float(os.environ.get("FRLG_JOIN_IP_WAIT", "12"))
++                network = None
++                await self._interface.set_authorized()
++                with _trio.move_on_after(wait):
++                    network, index = await self._wait_for_network()
++                if network is None:
++                    raise ConnectionError(
++                        f"the console did not list us as a participant within "
++                        f"{wait:g}s of joining (no IP assigned)")
++                self._network = network
++                self._network_id = int(
++                    network.participants[0].ip_address.split(".")[2])
++                self._participant_id = index
++                local_address = network.participants[index].ip_address
++                broadcast_address = f"169.254.{self._network_id}.255"
++                await self._interface.add_address(local_address, broadcast_address)
++                for participant in network.participants:
++                    if participant.connected:
++                        await self._interface.add_neighbor(
++                            participant.ip_address, participant.mac_address)
++
++            ldn.STANetwork._initialize_network = _initialize_network_patient
++            ldn.STANetwork._frlg_patient = True
++
          async def main():
              keys = ldn.load_keys(self.keys_path)
              self.info("Scanning for the FRLG network...")
@@ -76,7 +170,7 @@
              joinable = [n for n in networks
                          if n.accept_policy != ldn.ACCEPT_NONE
                          and n.num_participants < n.max_participants]
-@@ -384,10 +420,20 @@
+@@ -384,10 +488,20 @@
              # Prefer an exact FRLG comm-id match; else fall back to the only joinable network.
              net = next((n for n in joinable
                          if n.local_communication_id == self.LOCAL_COMMUNICATION_ID), None)
