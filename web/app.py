@@ -320,7 +320,7 @@ def api_trade_start():
     publish("$ " + " ".join(cmd), "cmd")
     env = {**os.environ,
            "FRLG_SCAN_DWELL": str(b.get("dwell") or 0.60),
-           "FRLG_JOIN_ATTEMPTS": str(int(b.get("attempts") or 8)),
+           "FRLG_JOIN_ATTEMPTS": str(int(b.get("attempts") or 1)),
            "FRLG_JOIN_SETTLE": str(b.get("settle") or 4.0),
            "FRLG_JOIN_UNWIND": str(b.get("unwind") or 8.0),
            # This console's GBA NSO app advertises a different id than the one
@@ -424,12 +424,41 @@ def _wait_radio(free=True, timeout=45):
     return radio_state()["ready_for_trade"] == free
 
 
+LDN_VIFS = ("ldn", "ldnclient", "ldndiag0")
+
+
+def _clear_ldn_vifs():
+    """Delete any leftover LDN virtual interface.
+
+    nl80211 ACTION-frame registrations hang off the vif. If a run is killed --
+    which Cancel does, and which a crash does -- the vif survives, still UP and
+    still holding its registration. Every later attempt then dies with
+      BlockingIOError [Errno 114]: Match already configured
+    before it ever reaches the console, and no amount of retrying helps because
+    the obstacle is local. Clear them before each attempt and after each kill.
+    """
+    for vif in LDN_VIFS:
+        subprocess.run(["iw", "dev", vif, "del"],
+                       capture_output=True, timeout=10)
+        subprocess.run(["ip", "link", "del", vif],
+                       capture_output=True, timeout=10)
+
+
 def _run(cmd, tag):
     """Run a child process, streaming its output, honouring cancel."""
     global _proc
     env = {**os.environ,
            "FRLG_SCAN_DWELL": os.environ.get("FRLG_SCAN_DWELL", "0.60"),
-           "FRLG_JOIN_ATTEMPTS": os.environ.get("FRLG_JOIN_ATTEMPTS", "8")}
+           # ONE in-process attempt. nl80211 frame registrations belong to
+           # the netlink SOCKET, which lives as long as the process, and the
+           # ldn library does not release them between retries -- so the
+           # SECOND attempt onwards dies with
+           #   BlockingIOError [Errno 114]: Match already configured
+           # before it ever reaches the console. Measured: attempt 1 gives a
+           # genuine result, every later one in the same process is doomed.
+           # The outer loop restarts the process instead, so each attempt
+           # gets a clean socket and is a real attempt.
+           "FRLG_JOIN_ATTEMPTS": os.environ.get("FRLG_JOIN_ATTEMPTS", "1")}
     _proc = subprocess.Popen(cmd, cwd=ROOT, stdout=subprocess.PIPE,
                              stderr=subprocess.STDOUT, text=True, bufsize=1, env=env)
     out = []
@@ -441,6 +470,9 @@ def _run(cmd, tag):
             _proc.terminate()
             break
     rc = _proc.wait()
+    # A terminated child never runs its own cleanup, so do it here.
+    if _send_cancel.is_set() or rc != 0:
+        _clear_ldn_vifs()
     return rc, out
 
 
@@ -457,32 +489,23 @@ def _send_worker(keep_radio, trades=1, slot=1):
         out_name = "received.pk3"
         while not _send_cancel.is_set():
             SEND["attempt"] += 1
+            # Scan and join must be ATOMIC. This used to run scan.py first --
+            # four passes over seven channels, ~25s, tearing the radio down at
+            # each pass -- and only then start frlgtrade.py, which freed the
+            # radio and scanned all over again. By the time we tried to
+            # associate, the session we had found was half a minute stale, and
+            # a console only advertises while somebody stands at the waiting
+            # screen. frlgtrade.py does its own scan and joins the instant it
+            # finds a match, so let it do both with no gap in between.
             set_phase("scan", "listening for your console")
-            rc, out = _run([sys.executable, os.path.join(APP_DIR, "scan.py")], "scan")
-            if _send_cancel.is_set():
-                break
-            found = any("RESULT: FRLG" in l for l in out)
-            if not found:
-                set_phase("scan", "no session yet — keep the console on the "
-                                  "trade waiting screen; retrying")
-                for _ in range(8):
-                    if _send_cancel.is_set(): break
-                    time.sleep(1)
-                continue
-
-            set_phase("join", "console found, joining")
+            _clear_ldn_vifs()          # start every attempt from a clean radio
             cmd = [sys.executable, os.path.join(ROOT, "frlgtrade.py"), "--live",
                    "-o", os.path.join(OUT_DIR, out_name), "--verbose",
-                   # A Gen-3 trade is symmetric: each side offers one of its
-                   # OWN party. The sim must nominate a slot, so --slot picks
-                   # which, and --trades runs several back to back (the trade
-                   # menu stays up), which is how you receive more than one.
                    "--trades", str(trades), "--slot", str(slot)]
             comm = os.environ.get("FRLG_COMM_ID")
             if comm:
                 cmd += ["--comm-id", str(comm)]
             cmd += [os.path.join(PK3_DIR, p) for p in party]
-            set_phase("trade", "trading — follow the steps on your console")
             rc, out = _run(cmd, "trade")
             if _send_cancel.is_set():
                 break
@@ -490,12 +513,24 @@ def _send_worker(keep_radio, trades=1, slot=1):
                 SEND["received"] = out_name
                 set_phase("done", "trade complete")
                 return
+
+            joined = any("saw network" in l for l in out)
             cause = next((l for l in reversed(out)
                           if l.strip() and not l.startswith((" ", "\t"))
                           and "Traceback" not in l and "^^^" not in l), "")
-            set_phase("join", f"attempt {SEND['attempt']} did not land — retrying")
-            publish(cause or f"exited rc={rc}", "err")
-            for _ in range(5):
+            if not joined:
+                # Nothing was advertising: this is the console's side, not ours.
+                set_phase("scan", "no session yet — keep the console on the "
+                                  "trade waiting screen; retrying")
+                wait = 3
+            else:
+                # We saw it and failed to associate. Retrying quickly is right:
+                # the session is live right now.
+                set_phase("join", f"found it, but the join did not take "
+                                  f"(attempt {SEND['attempt']}) — retrying")
+                publish(cause or f"exited rc={rc}", "err")
+                wait = 2
+            for _ in range(wait):
                 if _send_cancel.is_set(): break
                 time.sleep(1)
 
