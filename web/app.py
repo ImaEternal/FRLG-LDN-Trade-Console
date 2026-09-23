@@ -245,8 +245,11 @@ def api_party():
     """Write the chosen mons to pk3/ as PARTY1..N, replacing what was there."""
     b = request.get_json(force=True)
     slots = b.get("slots") or []
-    if not 1 <= len(slots) <= 6:
-        return jsonify({"error": "need between 1 and 6 slots"}), 400
+    if len(slots) > 6:
+        return jsonify({"error": "a party holds at most 6"}), 400
+    # An empty list is a legitimate "clear the party": removing the last
+    # Pokemon must be able to reach disk, or the old files linger and the UI
+    # silently disagrees with what would actually be sent.
     for f in os.listdir(PK3_DIR):
         if re.fullmatch(r"PARTY\d\.pk3", f):
             os.remove(os.path.join(PK3_DIR, f))

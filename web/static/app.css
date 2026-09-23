@@ -158,11 +158,20 @@ input[type=range]{width:100%;accent-color:var(--red);height:20px}
 .socket.full{background:color-mix(in srgb,var(--type) 9%,#fff);
   border:2px solid color-mix(in srgb,var(--type) 55%,#fff);border-style:solid}
 .socket.full img{width:66%;height:66%;filter:drop-shadow(0 3px 5px rgba(18,28,45,.2))}
-.socket.shiny::after{content:"✦";position:absolute;top:5px;right:11px;color:#f5a623;font-size:13px}
-.socket .x{position:absolute;bottom:0;right:0;width:22px;height:22px;border-radius:50%;
-  border:1px solid var(--line-2);background:#fff;color:var(--ink-2);cursor:pointer;
-  font-size:13px;line-height:.9;padding:0;opacity:0;transition:.15s;box-shadow:var(--sh-sm)}
-.socket:hover .x{opacity:1}
+.socket.shiny::after{content:"✦";position:absolute;top:6px;left:10px;color:#f5a623;font-size:13px}
+/* Always visible. It used to appear only on :hover, which made it invisible on
+   touch (no hover event) and undiscoverable with a mouse — you had to find it
+   by accident. A control nobody can see is not a control. */
+.socket .x{position:absolute;top:-2px;right:-2px;width:26px;height:26px;
+  border-radius:50%;border:1px solid var(--line-2);background:#fff;color:var(--ink-3);
+  cursor:pointer;font-size:15px;line-height:.85;padding:0;transition:.15s;
+  box-shadow:0 1px 4px rgba(18,28,45,.18);display:grid;place-items:center}
+.socket:hover .x{border-color:var(--red);color:var(--red)}
+.socket .x:hover,.socket .x:focus-visible{background:var(--red);color:#fff;
+  border-color:var(--red-dk);transform:scale(1.1)}
+@media (hover:none),(pointer:coarse){
+  .socket .x{width:30px;height:30px;font-size:17px}
+}
 .socket .x:hover{background:var(--red);color:#fff;border-color:var(--red)}
 .socket .tip{position:absolute;bottom:-6px;left:50%;
   transform:translateX(-50%) translateY(6px);background:var(--ink);color:#fff;

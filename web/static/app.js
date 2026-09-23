@@ -163,12 +163,33 @@ function renderParty() {
 }
 $("#party").addEventListener("click", e => {
   const b = e.target.closest(".x"); if (!b) return;
-  party.splice(+b.dataset.i,1); renderParty();
+  party.splice(+b.dataset.i,1);
+  renderParty();
+  savePartySoon();          // otherwise a reload brings it straight back
 });
+
+// The .pk3 files on disk are the real party. Without writing changes through,
+// removing a Pokemon only edited the in-memory list: it vanished, then
+// reappeared on the next reload because the files still held the old party.
+let _saveT = null;
+function savePartySoon() {
+  clearTimeout(_saveT);
+  _saveT = setTimeout(async () => {
+    const r = await fetch("/api/party", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({slots: party, ot: $("#ot").value || "EMU"}),
+    });
+    if (r.ok) {
+      log(party.length ? `party saved (${party.length})` : "party cleared", "ok");
+    }
+    poll();
+  }, 400);
+}
 $("#addBtn").addEventListener("click", () => {
   if (!preview || party.length>=6) return;
   party.push({...params(), name:preview.name, nature:preview.nature, shiny:preview.shiny});
   renderParty();
+  savePartySoon();
 });
 
 // ---------- box ----------
@@ -192,7 +213,7 @@ $("#boxList").addEventListener("click", async e => {
   if (add) {
     const b = (window.__box||[]).find(x=>x.slug===add);
     if (b && party.length < 6) { party.push({...b.spec, name:b.name, nature:b.nature, shiny:b.shiny});
-      renderParty(); log(`added ${b.slug} from the box`, "ok"); }
+      renderParty(); savePartySoon(); log(`added ${b.slug} from the box`, "ok"); }
   }
 });
 $("#boxBtn").addEventListener("click", async () => {
